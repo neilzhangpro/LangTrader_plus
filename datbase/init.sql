@@ -229,8 +229,9 @@ CREATE TABLE trade_records (
     leverage INTEGER DEFAULT 1,
     order_id VARCHAR(255), -- 交易所订单ID
     status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'filled', 'cancelled', 'failed'
-    executed_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    executed_at TIMESTAMP, -- 执行时间
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 9. 决策日志表（新增，用于记录 LangGraph 决策过程）
@@ -242,7 +243,8 @@ CREATE TABLE decision_logs (
     decision_result VARCHAR(50), -- 'buy', 'sell', 'hold'
     reasoning TEXT, -- AI 决策理由
     confidence DECIMAL(5, 4), -- 决策置信度 0-1
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -286,4 +288,10 @@ CREATE TRIGGER update_prompt_templates_updated_at BEFORE UPDATE ON prompt_templa
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_system_config_updated_at BEFORE UPDATE ON system_config
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_trade_records_updated_at BEFORE UPDATE ON trade_records
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_decision_logs_updated_at BEFORE UPDATE ON decision_logs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
