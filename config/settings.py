@@ -22,7 +22,7 @@ class Settings:
         self.db_conn_str = f"postgresql://{self.db_user}:{self.db_password}@{self.db_url}:{self.db_port}/{self.db_name}"
         self.pool_size = 10 #连接池大小
         self.max_overflow = 20 #最大溢出连接数
-        self.engine = create_sqlmodel_engine(self.db_conn_str,pool_size=self.pool_size,max_overflow=self.max_overflow,echo=True)
+        self.engine = create_sqlmodel_engine(self.db_conn_str,pool_size=self.pool_size,max_overflow=self.max_overflow,echo=False)
     
     @contextmanager
     def get_session(self):

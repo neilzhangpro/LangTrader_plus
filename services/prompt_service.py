@@ -8,6 +8,7 @@ from config.settings import Settings
 from models.prompt_template import PromptTemplate
 from sqlmodel import select
 from models.trader import Trader
+from utils.logger import logger
 
 # services/prompt_service.py
 class PromptService:
@@ -24,7 +25,7 @@ class PromptService:
                 # 在会话关闭前提取 content
                 return prompt.content if prompt else None
         except Exception as e:
-            print(f"Error getting prompt by name: {e}")
+            logger.error(f"Error getting prompt by name: {e}")
             return None
     
     def get_prompt_by_trader(self, trader_id: str) -> str | None:
@@ -61,5 +62,5 @@ class PromptService:
                     # 交易员不存在，返回默认提示词
                     return self.get_prompt_by_name("default")
         except Exception as e:
-            print(f"Error getting prompt by trader: {e}")
+            logger.error(f"Error getting prompt by trader: {e}")
             return None
