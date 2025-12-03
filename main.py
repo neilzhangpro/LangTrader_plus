@@ -42,8 +42,8 @@ def main():
         print(f"✅ 交易员 {trader_name} 已启动")
         
         # 等待几秒，观察扫描是否工作
-        print(f"\n⏳ 等待 10 秒，观察扫描循环...")
-        for i in range(10):
+        print(f"\n⏳ 等待 600 秒，观察扫描循环...")
+        for i in range(60*10):
             time.sleep(1)
             status = trader_manager.get_trader_status(str(first_trader_id))  # 确保传递字符串
             if status:
