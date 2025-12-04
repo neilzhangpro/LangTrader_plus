@@ -26,6 +26,44 @@ class APIClient:
         except Exception as e:
             logger.error(f"❌ 获取市场数据失败: {e}", exc_info=True)
             return None
+    
+    def get_open_interest(self, symbol: str):
+        """获取持仓量（返回合约数量）"""
+        try:
+            symbol = self._normalize_symbol(symbol)
+            open_interest_data = self.exchange.fetch_open_interest(symbol)
+            
+            if open_interest_data is None:
+                logger.debug(f"⚠️ {symbol} Open Interest 返回 None")
+                return None
+            
+            # CCXT 返回格式: {'openInterestAmount': 12345.67, 'openInterestValue': None, ...}
+            if isinstance(open_interest_data, dict):
+                # 优先使用 openInterestAmount（持仓量，合约数量）
+                oi_amount = open_interest_data.get('openInterestAmount')
+                if oi_amount is not None:
+                    return float(oi_amount)
+                
+                # 备选：尝试 openInterest 字段
+                oi = open_interest_data.get('openInterest')
+                if oi is not None:
+                    return float(oi)
+            
+            logger.warning(f"⚠️ {symbol} Open Interest 数据格式异常: {open_interest_data}")
+            return None
+        except Exception as e:
+            logger.error(f"❌ 获取 {symbol} 持仓量失败: {e}", exc_info=True)
+            return None
+    
+    def get_funding_rate(self, symbol: str):
+        """获取资金费率"""
+        try:
+            funding_rate = self.exchange.fetch_funding_rate(symbol)
+            logger.info(f"获取到资金费率: {funding_rate}")
+            return funding_rate
+        except Exception as e:
+            logger.error(f"❌ 获取资金费率失败: {e}", exc_info=True)
+            return None
         
     def get_Klines(self, symbol: str, timeframe: str, limit: int=100):
         """获取K线数据"""

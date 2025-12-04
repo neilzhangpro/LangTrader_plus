@@ -117,7 +117,7 @@ class DataCollector:
             klines_3m = self.api_client.get_Klines(symbol, "3m", limit=200)
             klines_4h = self.api_client.get_Klines(symbol, "4h", limit=200)
             
-            state['market_data'] = {
+            state['market_data_map'] = {
                 'symbol': symbol,
                 'klines_3m': klines_3m or [],
                 'klines_4h': klines_4h or [],
@@ -127,7 +127,7 @@ class DataCollector:
             logger.info(f"✅ 已从 REST API 收集 {symbol} 的市场数据")
         except Exception as e:
             logger.error(f"❌ 收集市场数据失败: {e}", exc_info=True)
-            state['market_data'] = {
+            state['market_data_map'] = {
                 'symbol': symbol,
                 'error': str(e)
             }
