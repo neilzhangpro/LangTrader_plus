@@ -4,6 +4,8 @@ from typing import TypedDict, Optional
 class DecisionState(TypedDict):
     #处理的币种
     candidate_symbols: List[str] #候选币种列表
+    coin_sources: Dict[str, List[str]]  # 币种来源信息（ai500/oi_top/inside_ai）
+    oi_top_data_map: Dict[str, Dict]  # OI Top 详细信息
     #账户信息:余额, 持仓
     account_balance: float
     positions: List[Dict]

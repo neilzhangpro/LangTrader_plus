@@ -180,10 +180,14 @@ class AutoTrader:
             
             # 初始化状态（批量模式）
             # candidate_symbols 会在 coin_pool 节点中填充
+            # positions 会在 data_collector 节点中获取
+            # account_balance 会在 AI_decision 节点中获取
             decision_state = DecisionState(
                 candidate_symbols=[],  # 初始为空，coin_pool 节点会填充
-                account_balance=0.0,  # TODO: 从交易所获取实际余额
-                positions=[],  # TODO: 从交易所获取实际持仓
+                coin_sources={},  # coin_pool 节点会填充
+                oi_top_data_map={},  # coin_pool 节点会填充
+                account_balance=0.0,  # 将在 AI_decision 节点中获取
+                positions=[],  # 将在 data_collector 节点中获取
                 market_data_map={},  # data_collector 节点会填充
                 signal_data_map={},  # signal_analyzer 节点会填充
                 ai_decision=None,  # ai_decision 节点会填充
@@ -191,18 +195,28 @@ class AutoTrader:
             )
             
             # 一次调用处理所有候选币种
-            final_state = graph.invoke(decision_state)
+            try:
+                final_state = graph.invoke(decision_state)
+                logger.info(f"✅ 图执行完成")
+                logger.info(f"📊 最终状态 keys: {list(final_state.keys())}")
+                
+                # 检查各个节点的输出
+                if final_state.get('candidate_symbols'):
+                    logger.info(f"✅ coin_pool: {len(final_state['candidate_symbols'])} 个候选币种")
+                if final_state.get('market_data_map'):
+                    logger.info(f"✅ data_collector: {len(final_state['market_data_map'])} 个币种的市场数据")
+                if final_state.get('signal_data_map'):
+                    logger.info(f"✅ signal_analyzer: {len(final_state['signal_data_map'])} 个币种的信号数据")
+                if final_state.get('ai_decision'):
+                    logger.info(f"✅ AI_decision: 决策结果已生成")
+                    logger.debug(f"AI决策内容: {final_state['ai_decision']}")
+                else:
+                    logger.warning("⚠️ AI_decision: 未生成决策结果")
+            except Exception as e:
+                logger.error(f"❌ 图执行失败: {e}", exc_info=True)
+                raise
             
-            # 处理结果
-            if final_state.get('ai_decision'):
-                decisions = final_state['ai_decision'].get('decisions', [])
-                logger.info(f"✅ AI 决策完成，共 {len(decisions)} 个币种的决策")
-                for decision in decisions:
-                    logger.info(f"  - {decision.get('symbol')}: {decision.get('action')} (信心度: {decision.get('confidence', 0)})")
-            else:
-                logger.info("⚠️  未生成 AI 决策")
-            
-            logger.info(f"📊 [{self.trader_name}] LangGraph 决策引擎运行完成")
+            logger.info(f"�� [{self.trader_name}] LangGraph 决策引擎运行完成")
         except Exception as e:
             logger.error(f"❌ 交易员 {self.trader_name} 扫描错误: {e}", exc_info=True)
     

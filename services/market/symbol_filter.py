@@ -129,11 +129,12 @@ class SymbolFilter:
             return []
         
         # 按分数排序，选择Top 20
-        scored_coins.sort(key=lambda x: x['score'], reverse=True)
+        scored_coins.sort(key=lambda x: x.get('score', 0), reverse=True)
         top_n = 20
-        top_symbols = [coin['symbol'] for coin in scored_coins[:top_n]]
+        # 使用 .get() 方法，并过滤掉 None 值
+        top_symbols = [coin.get('symbol') for coin in scored_coins[:top_n] if coin.get('symbol')]
         
-        logger.debug(f"📊 AI评分Top {top_n}: {[(c['symbol'], c['score']) for c in scored_coins[:top_n]]}")
+        logger.debug(f"📊 AI评分Top {top_n}: {[(c.get('symbol', 'N/A'), c.get('score', 0)) for c in scored_coins[:top_n]]}")
         
         return top_symbols
     
