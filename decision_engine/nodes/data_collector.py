@@ -5,6 +5,7 @@ from typing import Optional, List, Dict
 from services.market.monitor import MarketMonitor
 import asyncio
 import threading
+from services.trader.CCXT_trader import CCXTTrader
 
 class DataCollector:
     """数据收集节点 - 收集市场数据（K线、价格等）和交易所信息（余额、持仓）"""
@@ -57,6 +58,8 @@ class DataCollector:
         # TODO: 实现获取账户余额的逻辑
         # 当前返回0.0，表示未实现
         logger.debug("获取账户余额（待实现）")
+        ccxt_trader = CCXTTrader(exchange_config)
+        
         return 0.0
 
     def _get_positions(self, state: DecisionState) -> List[Dict]:
