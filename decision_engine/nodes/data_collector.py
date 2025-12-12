@@ -59,8 +59,8 @@ class DataCollector:
         # 当前返回0.0，表示未实现
         logger.debug("获取账户余额（待实现）")
         ccxt_trader = CCXTTrader(exchange_config)
-        
-        return 0.0
+        logger.info(f"CCXTTrader account_balance: {ccxt_trader.get_balance()}")
+        return ccxt_trader.get_balance()
 
     def _get_positions(self, state: DecisionState) -> List[Dict]:
         """
@@ -79,8 +79,9 @@ class DataCollector:
         
         # TODO: 实现获取持仓的逻辑
         # 当前返回空列表，表示未实现
-        logger.debug("获取持仓信息（待实现）")
-        return []
+        ccxt_trader = CCXTTrader(exchange_config)
+        logger.info(f"CCXTTrader positions: {ccxt_trader.get_all_position()}")
+        return ccxt_trader.get_all_position()
 
     def run(self, state: DecisionState) -> DecisionState:
         """
@@ -100,10 +101,6 @@ class DataCollector:
         state['account_balance'] = account_balance
         state['positions'] = positions
         
-        if positions:
-            logger.info(f"✓ 获取到 {len(positions)} 个持仓")
-        if account_balance > 0:
-            logger.info(f"✓ 账户余额: {account_balance} USDT")
         
         # 2. 获取持仓币种（用于收集市场数据）
         position_symbols = {pos.get('symbol') for pos in positions if pos.get('symbol')}

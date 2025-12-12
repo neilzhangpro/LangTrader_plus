@@ -242,97 +242,250 @@ class AIDecision:
         )
 
     def _format_account_info(self, account_info: dict) -> str:
-        """格式化账户信息"""
+        """格式化账户信息（适配 hyperliquid 余额字典格式）"""
         if not account_info:
             return "无账户信息"
         
-        total_equity = account_info.get('total_equity')
-        available_balance = account_info.get('available_balance')
-        total_pnl = account_info.get('total_pnl')
-        total_pnl_pct = account_info.get('total_pnl_pct')
-        margin_used = account_info.get('margin_used')
-        margin_used_pct = account_info.get('margin_used_pct')
-        
         lines = []
-        if total_equity is not None:
-            lines.append(f"- 账户净值: {total_equity:.2f} USDT")
-        if available_balance is not None:
-            lines.append(f"- 可用余额: {available_balance:.2f} USDT")
-        if total_pnl is not None:
-            pnl_str = f"{total_pnl:+.2f} USDT"
-            if total_pnl_pct is not None:
-                pnl_str += f" ({total_pnl_pct:+.2f}%)"
-            lines.append(f"- 总盈亏: {pnl_str}")
-        if margin_used is not None:
-            margin_str = f"{margin_used:.2f} USDT"
-            if margin_used_pct is not None:
-                margin_str += f" ({margin_used_pct:.2f}%)"
-            lines.append(f"- 已用保证金: {margin_str}")
+        
+        # 处理 hyperliquid 返回的余额字典格式
+        if isinstance(account_info, dict):
+            # 1. 提取可用余额（优先使用 withdrawable）
+            available_balance = None
+            if 'info' in account_info and isinstance(account_info['info'], dict):
+                withdrawable = account_info['info'].get('withdrawable')
+                if withdrawable is not None:
+                    try:
+                        available_balance = float(withdrawable)
+                    except (ValueError, TypeError):
+                        pass
+            
+            # 如果 withdrawable 不可用，尝试使用 CCXT 标准化的 free 字段
+            if available_balance is None:
+                if 'USDC' in account_info and isinstance(account_info['USDC'], dict):
+                    available_balance = account_info['USDC'].get('free', 0.0)
+                elif 'free' in account_info and isinstance(account_info['free'], dict):
+                    available_balance = account_info['free'].get('USDC', 0.0)
+            
+            # 2. 提取账户总价值
+            total_equity = None
+            if 'info' in account_info and isinstance(account_info['info'], dict):
+                margin_summary = account_info['info'].get('marginSummary', {})
+                if isinstance(margin_summary, dict):
+                    account_value = margin_summary.get('accountValue')
+                    if account_value is not None:
+                        try:
+                            total_equity = float(account_value)
+                        except (ValueError, TypeError):
+                            pass
+            
+            # 3. 提取已用保证金
+            margin_used = None
+            if 'info' in account_info and isinstance(account_info['info'], dict):
+                margin_summary = account_info['info'].get('marginSummary', {})
+                if isinstance(margin_summary, dict):
+                    total_margin_used = margin_summary.get('totalMarginUsed')
+                    if total_margin_used is not None:
+                        try:
+                            margin_used = float(total_margin_used)
+                        except (ValueError, TypeError):
+                            pass
+            
+            # 4. 提取总持仓价值
+            total_position_value = None
+            if 'info' in account_info and isinstance(account_info['info'], dict):
+                margin_summary = account_info['info'].get('marginSummary', {})
+                if isinstance(margin_summary, dict):
+                    total_ntl_pos = margin_summary.get('totalNtlPos')
+                    if total_ntl_pos is not None:
+                        try:
+                            total_position_value = float(total_ntl_pos)
+                        except (ValueError, TypeError):
+                            pass
+            
+            # 5. 提取未实现盈亏（如果有持仓）
+            unrealized_pnl = None
+            if total_equity is not None and total_position_value is not None and margin_used is not None:
+                # 未实现盈亏 = 账户总价值 - 总持仓价值 - 已用保证金
+                # 或者从 assetPositions 中计算
+                asset_positions = account_info.get('info', {}).get('assetPositions', [])
+                if asset_positions:
+                    total_unrealized = 0.0
+                    for pos_data in asset_positions:
+                        position = pos_data.get('position', {})
+                        if position:
+                            unrealized = position.get('unrealizedPnl')
+                            if unrealized is not None:
+                                try:
+                                    total_unrealized += float(unrealized)
+                                except (ValueError, TypeError):
+                                    pass
+                    if total_unrealized != 0.0:
+                        unrealized_pnl = total_unrealized
+            
+            # 格式化输出
+            if total_equity is not None:
+                lines.append(f"- 账户总价值: {total_equity:.2f} USDT")
+            
+            if available_balance is not None:
+                lines.append(f"- 可用余额: {available_balance:.2f} USDT")
+            
+            if margin_used is not None:
+                # 计算已用保证金百分比
+                margin_used_pct = None
+                if total_equity is not None and total_equity > 0:
+                    margin_used_pct = (margin_used / total_equity) * 100
+                
+                margin_str = f"{margin_used:.2f} USDT"
+                if margin_used_pct is not None:
+                    margin_str += f" ({margin_used_pct:.2f}%)"
+                lines.append(f"- 已用保证金: {margin_str}")
+            
+            if total_position_value is not None and total_position_value != 0:
+                lines.append(f"- 总持仓价值: {total_position_value:.2f} USDT")
+            
+            if unrealized_pnl is not None:
+                # 计算盈亏百分比
+                pnl_pct = None
+                if total_equity is not None and total_equity > 0:
+                    pnl_pct = (unrealized_pnl / total_equity) * 100
+                
+                pnl_str = f"{unrealized_pnl:+.2f} USDT"
+                if pnl_pct is not None:
+                    pnl_str += f" ({pnl_pct:+.2f}%)"
+                lines.append(f"- 未实现盈亏: {pnl_str}")
         
         return "\n".join(lines) if lines else "无账户信息"
 
     def _format_positions(self, positions: list) -> str:
-        """格式化持仓信息（包含完整信息）"""
+        """格式化持仓信息（适配 hyperliquid CCXT 返回格式）"""
         if not positions:
             return "无持仓"
         
         formatted_lines = []
         for pos in positions:
             logger.debug(f"持仓信息-------------->: {pos}")
+            
+            # 提取基础字段（CCXT 标准化字段）
             symbol = pos.get('symbol', 'N/A')
             side = pos.get('side', 'N/A')
             
-            # 安全获取数值字段，如果值为 None 则使用默认值
-            size = pos.get('size')
+            # 提取持仓数量（使用 contracts 字段）
+            size = pos.get('contracts')
             if size is None:
-                size = 0.0
+                # 如果 contracts 不存在，尝试从 info.position.szi 获取
+                info_pos = pos.get('info', {}).get('position', {})
+                if info_pos:
+                    szi = info_pos.get('szi')
+                    if szi is not None:
+                        try:
+                            size = float(szi)
+                        except (ValueError, TypeError):
+                            size = 0.0
+                    else:
+                        size = 0.0
+                else:
+                    size = 0.0
             else:
                 try:
                     size = float(size)
                 except (ValueError, TypeError):
                     size = 0.0
             
-            entry_price = pos.get('entry_price')
+            # 提取开仓价（使用 entryPrice 字段）
+            entry_price = pos.get('entryPrice')
             if entry_price is None:
-                entry_price = 0.0
+                # 如果 entryPrice 不存在，尝试从 info.position.entryPx 获取
+                info_pos = pos.get('info', {}).get('position', {})
+                if info_pos:
+                    entry_px = info_pos.get('entryPx')
+                    if entry_px is not None:
+                        try:
+                            entry_price = float(entry_px)
+                        except (ValueError, TypeError):
+                            entry_price = 0.0
+                    else:
+                        entry_price = 0.0
+                else:
+                    entry_price = 0.0
             else:
                 try:
                     entry_price = float(entry_price)
                 except (ValueError, TypeError):
                     entry_price = 0.0
             
-            mark_price = pos.get('mark_price')
+            # 提取标记价（可能为 None）
+            mark_price = pos.get('markPrice')
             if mark_price is None:
-                mark_price = 0.0
+                mark_price_str = "N/A"
             else:
                 try:
-                    mark_price = float(mark_price)
+                    mark_price_float = float(mark_price)
+                    mark_price_str = f"{mark_price_float:.2f}"
                 except (ValueError, TypeError):
-                    mark_price = 0.0
+                    mark_price_str = "N/A"
             
-            unrealized_pnl = pos.get('unrealized_pnl')
+            # 提取未实现盈亏（使用 unrealizedPnl 字段）
+            unrealized_pnl = pos.get('unrealizedPnl')
             if unrealized_pnl is None:
-                unrealized_pnl = 0.0
+                # 如果 unrealizedPnl 不存在，尝试从 info.position.unrealizedPnl 获取
+                info_pos = pos.get('info', {}).get('position', {})
+                if info_pos:
+                    unrealized = info_pos.get('unrealizedPnl')
+                    if unrealized is not None:
+                        try:
+                            unrealized_pnl = float(unrealized)
+                        except (ValueError, TypeError):
+                            unrealized_pnl = 0.0
+                    else:
+                        unrealized_pnl = 0.0
+                else:
+                    unrealized_pnl = 0.0
             else:
                 try:
                     unrealized_pnl = float(unrealized_pnl)
                 except (ValueError, TypeError):
                     unrealized_pnl = 0.0
             
+            # 提取杠杆（使用 leverage 字段，已经是数字）
             leverage = pos.get('leverage')
             if leverage is None:
-                leverage = 1
-            else:
-                try:
-                    leverage = int(leverage)
-                except (ValueError, TypeError):
+                # 如果 leverage 不存在，尝试从 info.position.leverage.value 获取
+                info_pos = pos.get('info', {}).get('position', {})
+                if info_pos:
+                    leverage_dict = info_pos.get('leverage', {})
+                    if isinstance(leverage_dict, dict):
+                        leverage = leverage_dict.get('value')
+                    else:
+                        leverage = 1
+                else:
                     leverage = 1
             
-            liquidation_price = pos.get('liquidation_price')
-            margin_used = pos.get('margin_used')
-            update_time = pos.get('update_time')
+            if leverage is not None:
+                try:
+                    leverage = int(float(leverage))
+                except (ValueError, TypeError):
+                    leverage = 1
+            else:
+                leverage = 1
             
-            # 处理 liquidation_price 和 margin_used，确保它们要么是数字要么是 'N/A'
+            # 提取清算价格（使用 liquidationPrice 字段）
+            liquidation_price = pos.get('liquidationPrice')
+            if liquidation_price is None:
+                # 如果 liquidationPrice 不存在，尝试从 info.position.liquidationPx 获取
+                info_pos = pos.get('info', {}).get('position', {})
+                if info_pos:
+                    liquidation_px = info_pos.get('liquidationPx')
+                    if liquidation_px is not None:
+                        try:
+                            liquidation_price = float(liquidation_px)
+                        except (ValueError, TypeError):
+                            liquidation_price = None
+                    else:
+                        liquidation_price = None
+                else:
+                    liquidation_price = None
+            
             liquidation_price_str = "N/A"
             if liquidation_price is not None:
                 try:
@@ -340,6 +493,23 @@ class AIDecision:
                     liquidation_price_str = f"{liquidation_price_float:.2f}"
                 except (ValueError, TypeError):
                     liquidation_price_str = "N/A"
+            
+            # 提取已用保证金（使用 collateral 字段）
+            margin_used = pos.get('collateral')
+            if margin_used is None:
+                # 如果 collateral 不存在，尝试从 info.position.marginUsed 获取
+                info_pos = pos.get('info', {}).get('position', {})
+                if info_pos:
+                    margin_used_str = info_pos.get('marginUsed')
+                    if margin_used_str is not None:
+                        try:
+                            margin_used = float(margin_used_str)
+                        except (ValueError, TypeError):
+                            margin_used = None
+                    else:
+                        margin_used = None
+                else:
+                    margin_used = None
             
             margin_used_str = "N/A"
             if margin_used is not None:
@@ -349,35 +519,83 @@ class AIDecision:
                 except (ValueError, TypeError):
                     margin_used_str = "N/A"
             
-            # 计算盈亏百分比（避免除以0）
-            if entry_price and size and entry_price * size > 0:
-                pnl_percent = (unrealized_pnl / (entry_price * size)) * 100
+            # 提取持仓名义价值（使用 notional 字段）
+            position_value = pos.get('notional')
+            if position_value is None:
+                # 如果 notional 不存在，尝试从 info.position.positionValue 获取
+                info_pos = pos.get('info', {}).get('position', {})
+                if info_pos:
+                    pos_value = info_pos.get('positionValue')
+                    if pos_value is not None:
+                        try:
+                            position_value = float(pos_value)
+                        except (ValueError, TypeError):
+                            position_value = None
+                    else:
+                        position_value = None
+                else:
+                    position_value = None
+            
+            # 提取保证金模式
+            margin_mode = pos.get('marginMode', 'N/A')
+            if margin_mode == 'cross':
+                margin_mode_str = '全仓'
+            elif margin_mode == 'isolated':
+                margin_mode_str = '逐仓'
             else:
-                pnl_percent = 0.0
+                margin_mode_str = str(margin_mode)
+            
+            # 提取盈亏百分比（使用 percentage 字段，如果存在）
+            pnl_percent = pos.get('percentage')
+            if pnl_percent is None:
+                # 如果 percentage 不存在，尝试从 info.position.returnOnEquity 获取
+                info_pos = pos.get('info', {}).get('position', {})
+                if info_pos:
+                    roe = info_pos.get('returnOnEquity')
+                    if roe is not None:
+                        try:
+                            pnl_percent = float(roe) * 100  # returnOnEquity 是小数，需要乘以100
+                        except (ValueError, TypeError):
+                            # 如果计算失败，使用 entry_price 和 size 计算
+                            if entry_price and size and entry_price * size > 0:
+                                pnl_percent = (unrealized_pnl / (entry_price * size)) * 100
+                            else:
+                                pnl_percent = 0.0
+                    else:
+                        # 使用 entry_price 和 size 计算
+                        if entry_price and size and entry_price * size > 0:
+                            pnl_percent = (unrealized_pnl / (entry_price * size)) * 100
+                        else:
+                            pnl_percent = 0.0
+                else:
+                    # 使用 entry_price 和 size 计算
+                    if entry_price and size and entry_price * size > 0:
+                        pnl_percent = (unrealized_pnl / (entry_price * size)) * 100
+                    else:
+                        pnl_percent = 0.0
+            else:
+                try:
+                    pnl_percent = float(pnl_percent)
+                except (ValueError, TypeError):
+                    pnl_percent = 0.0
             
             pnl_status = "盈利" if unrealized_pnl > 0 else "亏损" if unrealized_pnl < 0 else "持平"
             
-            # 格式化更新时间
-            update_time_str = "N/A"
-            if update_time:
-                try:
-                    dt = datetime.fromtimestamp(update_time / 1000)  # 毫秒转秒
-                    update_time_str = dt.strftime('%Y-%m-%d %H:%M:%S')
-                except Exception:
-                    update_time_str = str(update_time)
-            
+            # 格式化输出
             formatted_lines.append(
                 f"  {symbol}:\n"
                 f"    - 方向: {side}\n"
                 f"    - 数量: {size:.4f}\n"
                 f"    - 杠杆: {leverage}x\n"
+                f"    - 保证金模式: {margin_mode_str}\n"
                 f"    - 开仓价: {entry_price:.2f}\n"
-                f"    - 标记价: {mark_price:.2f}\n"
-                f"    - 未实现盈亏: {unrealized_pnl:+.2f} ({pnl_percent:+.2f}%) [{pnl_status}]\n"
+                f"    - 标记价: {mark_price_str}\n"
+                f"    - 持仓价值: {position_value:.2f} USDT\n" if position_value is not None else ""
+                f"    - 未实现盈亏: {unrealized_pnl:+.2f} USDT ({pnl_percent:+.2f}%) [{pnl_status}]\n"
                 f"    - 清算价格: {liquidation_price_str}\n"
-                f"    - 已用保证金: {margin_used_str} USDT\n"
-                f"    - 更新时间: {update_time_str}"
+                f"    - 已用保证金: {margin_used_str} USDT"
             )
+        
         logger.debug(f"formatted_lines-------------->: {formatted_lines}")
         return "\n".join(formatted_lines) if formatted_lines else "无持仓"
     
@@ -491,20 +709,12 @@ class AIDecision:
         coins = state.get('candidate_symbols', [])
         market_data_map = state.get('market_data_map', {})
         signal_data_map = state.get('signal_data_map', {})
-        account_balance = state.get('account_balance', 0.0)
+        account_balance = state.get('account_balance', {})
         positions = state.get('positions', [])
         coin_sources = state.get('coin_sources', {})
         oi_top_data_map = state.get('oi_top_data_map', {})
         performance = state.get('performance')
         alerts = state.get('alerts')
-        
-        # 获取账户信息（从state获取）
-        account_info = {
-            'total_equity': account_balance,
-            'available_balance': account_balance,
-            'margin_used': 0.0,
-            'margin_used_pct': 0.0
-        }
         
         # 获取当前持仓（从state获取）
         positions = state.get('positions', [])
@@ -521,7 +731,7 @@ class AIDecision:
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # 格式化各部分信息
-        account_info_str = self._format_account_info(account_info)
+        account_info_str = self._format_account_info(account_balance)
         performance_info = self._format_performance(performance)
         alerts_info = self._format_alerts(alerts)
         market_info = self._format_market_data(market_data_map)

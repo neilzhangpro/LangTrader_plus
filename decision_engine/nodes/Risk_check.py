@@ -81,13 +81,9 @@ class RiskCheck:
             logger.warning("⚠️ AI决策格式错误，跳过风险检查")
             return state
         
-        # 2. 获取账户信息
-        account_info = self._get_account_info(state)
-        if not account_info or account_info.get('total_equity', 0) <= 0:
-            logger.error("❌ 账户净值无效，无法进行风险检查")
-            return state
+
         
-        total_equity = account_info['total_equity']
+        total_equity = state.get('account_balance', {}).get('total_equity', 0)
         
         # 3. 获取持仓和市场数据
         positions = state.get('positions', [])
@@ -162,21 +158,6 @@ class RiskCheck:
         
         return state
     
-    def _get_account_info(self, state: DecisionState) -> Optional[Dict]:
-        """获取账户信息（从state获取）"""
-        # 从state获取account_balance
-        account_balance = state.get('account_balance', 0.0)
-        
-        # 使用account_balance构建账户信息
-        if account_balance > 0:
-            return {
-                'total_equity': account_balance,
-                'available_balance': account_balance,
-                'margin_used': 0.0,
-                'margin_used_pct': 0.0
-            }
-        
-        return None
     
     def _validate_decision(
         self, 

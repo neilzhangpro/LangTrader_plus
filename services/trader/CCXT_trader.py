@@ -2,13 +2,15 @@ import ccxt
 from decimal import Decimal
 from services.trader.interface import ExchangeInterface
 from utils.logger import logger
+from typing import Optional
 
 class CCXTTrader(ExchangeInterface):
     """CCXT交易所交易接口"""
     def __init__(self, exchange_config: dict):
+        logger.info(f"CCXTTrader initialized with exchange_config: {exchange_config}")
         self.exchange_config = exchange_config
-        exchange_id = exchange_config.get("name")
-        exchange_class = getattr(ccxt, exchange_id)
+        self.exchange_id = exchange_config.get("name")
+        exchange_class = getattr(ccxt, self.exchange_id)
         self.exchange = exchange_class({
             'wallet_address':exchange_config.get("wallet_address"),
             'privateKey':exchange_config.get("secret_key"),
@@ -21,33 +23,33 @@ class CCXTTrader(ExchangeInterface):
             }
         })
 
-        #判断是否支持API
-        if self.exchange.has['fetchPositions']:
-            self.positions = self.exchange.fetchPositions()
-        else:
-            self.positions = []
-            logger.error(f"交易所 {exchange_id} 不支持获取持仓")
+        
+        
 
+
+    def get_balance(self, symbol:Optional[str] = None) -> Decimal:
+        """获取账户余额"""
         if self.exchange.has['fetchBalance']:
             self.account_balance = self.exchange.fetchBalance()
         else:
             self.account_balance = {}
-            logger.error(f"交易所 {exchange_id} 不支持获取余额")
-        
+            logger.error(f"交易所 {self.exchange_id} 不支持获取余额")
+        return self.account_balance
 
-
-    def get_balance(self, symbol: str) -> Decimal:
-        """获取账户余额"""
-        pass
-
-    def get_all_position(self, symbol: str) -> Decimal:
+    def get_all_position(self, symbol: Optional[str] = None) -> Decimal:
         """获取所有持仓"""
         if symbol:
             #获取单个仓位信息
             return self.exchange.fetchPosition(symbol)
         else:
             #获取所有仓位信息
-            return self.exchange.fetchPositions()
+            #判断是否支持API
+            if self.exchange.has['fetchPositions']:
+                self.positions = self.exchange.fetchPositions()
+            else:
+                self.positions = []
+                logger.error(f"交易所 {self.exchange_id} 不支持获取持仓")
+            return self.positions
 
     def openLong(self, symbol: str, quantity: Decimal, leverage: int) -> Decimal:
         """开多仓"""
